@@ -2,3 +2,16 @@
 .venv/
 venv/
 ENV/
+
+# Enviornment Variables
+.env
+
+# Database Logs
+logs/
+
+# Pychache
+**/__pycache__/
+
+# Alembic
+alembic/versions/*.py
+!alembic/versions/.gitkeep

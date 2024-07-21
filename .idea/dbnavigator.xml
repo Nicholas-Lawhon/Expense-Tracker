@@ -1,5 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
+  <component name="DBNavigator.Project.DDLFileAttachmentManager">
+    <mappings />
+    <preferences />
+  </component>
+  <component name="DBNavigator.Project.DataEditorManager">
+    <record-view-column-sorting-type value="BY_INDEX" />
+    <value-preview-text-wrapping value="true" />
+    <value-preview-pinned value="false" />
+  </component>
   <component name="DBNavigator.Project.DatabaseBrowserManager">
     <autoscroll-to-editor value="false" />
     <autoscroll-from-editor value="true" />
@@ -11,8 +20,14 @@
       <console name="Expense Database" type="STANDARD" schema="" session="Main" />
     </connection>
   </component>
+  <component name="DBNavigator.Project.DatabaseEditorStateManager">
+    <last-used-providers />
+  </component>
   <component name="DBNavigator.Project.DatabaseFileManager">
     <open-files />
+  </component>
+  <component name="DBNavigator.Project.DatabaseSessionManager">
+    <connection id="546b00e9-a855-41a1-a01b-8c7931a03ae0" />
   </component>
   <component name="DBNavigator.Project.ObjectQuickFilterManager">
     <last-used-operator value="EQUAL" />
@@ -22,8 +37,8 @@
     <connections>
       <connection id="546b00e9-a855-41a1-a01b-8c7931a03ae0" active="true" signed="true">
         <database>
-          <name value="Expense Database" />
-          <description value="Database housing manual expenses." />
+          <name value="Expense Tracker Database" />
+          <description value="Database housing all data related to my Expense Tracker project." />
           <database-type value="SQLITE" />
           <config-type value="BASIC" />
           <database-version value="3.44" />
@@ -37,7 +52,7 @@
           <tns-folder value="" />
           <tns-profile value="" />
           <files>
-            <file path="C:\Users\nicho\OneDrive\Documents\Projects\Finance\Expense Tracker\data\database.db" schema="main" />
+            <file path="C:\Users\nicho\OneDrive\Documents\Projects\Finance\Expense Tracker\expense_tracker\db\database.db" schema="main" />
           </files>
           <type value="NONE" />
           <user value="" />
