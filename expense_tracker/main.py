@@ -16,5 +16,3 @@ if __name__ == "__main__":
     except Exception as e:
         logger.error(f"An error occurred in main: {e}")
 
-# General Outline
-# DB Tables: Transactions (Manual & Automatic), Monthly Expenses, Accounts, Categories, Budget, Goals (optional, can add later).
