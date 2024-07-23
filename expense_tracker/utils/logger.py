@@ -12,6 +12,7 @@ to manage log file sizes.
 # Define the default logs directory
 DEFAULT_LOGS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'logs')
 
+
 def setup_logger(name, log_file, level=logging.INFO, logs_dir=DEFAULT_LOGS_DIR):
     """
     Set up a logger with file and console handlers.
@@ -31,15 +32,18 @@ def setup_logger(name, log_file, level=logging.INFO, logs_dir=DEFAULT_LOGS_DIR):
 
     formatter = logging.Formatter('%(asctime)s %(levelname)s: %(message)s')
 
-    handler = RotatingFileHandler(log_path, maxBytes=10000000, backupCount=5)
-    handler.setFormatter(formatter)
+    # File handler for all logs
+    file_handler = RotatingFileHandler(log_path, maxBytes=10000000, backupCount=5)
+    file_handler.setFormatter(formatter)
 
+    # Console handler for error logs
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(formatter)
+    console_handler.setLevel(logging.ERROR)
 
     logger = logging.getLogger(name)
     logger.setLevel(level)
-    logger.addHandler(handler)
+    logger.addHandler(file_handler)
     logger.addHandler(console_handler)
 
     return logger
