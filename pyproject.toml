@@ -16,8 +16,8 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.pytest.ini_options]
 pythonpath = [
-    "C:\\Users\\nicho\\OneDrive\\Documents\\Projects\\Finance\\Expense Tracker",
-    "C:\\Users\\nicho\\OneDrive\\Documents\\Projects\\Finance\\Expense Tracker\\expense_tracker"
+    "C:\\Projects\\Expense Tracker",
+    "C:\\Projects\\Expense Tracker\\expense_tracker"
 ]
 addopts = "--strict-markers"
 markers = [

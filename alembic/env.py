@@ -5,6 +5,12 @@ from alembic import context
 from dotenv import load_dotenv
 import os
 from expense_tracker.db.models import Base
+from expense_tracker.db.config import DB_URL
+
+
+config = context.config
+config.set_main_option("sqlalchemy.url", DB_URL)
+
 
 load_dotenv()
 
@@ -31,7 +37,8 @@ target_metadata = Base.metadata
 
 
 def run_migrations_offline() -> None:
-    """Run migrations in 'offline' mode.
+    """
+    Run migrations in 'offline' mode.
 
     This configures the context with just a URL
     and not an Engine, though an Engine is acceptable
@@ -40,11 +47,9 @@ def run_migrations_offline() -> None:
 
     Calls to context.execute() here emit the given string to the
     script output.
-
     """
-    url = os.getenv('DB_PATH')
     context.configure(
-        url=f"sqlite:///{url}",
+        url=DB_URL,
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
@@ -55,18 +60,17 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
-    """Run migrations in 'online' mode.
+    """
+    Run migrations in 'online' mode.
 
     In this scenario we need to create an Engine
     and associate a connection with the context.
-
     """
-    url = os.getenv('DB_PATH')
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
-        url=f"sqlite:///{url}"
+        url=DB_URL
     )
 
     with connectable.connect() as connection:
