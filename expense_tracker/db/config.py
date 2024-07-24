@@ -14,11 +14,15 @@ load_dotenv()
 # Get the directory of the current file
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 
+# Get the project root directory (two levels up from this file)
+PROJECT_ROOT = os.path.dirname(os.path.dirname(CURRENT_DIR))
+
 # Construct the path to the database file, using an environment variable
-DB_PATH = os.getenv('DB_PATH', os.path.join(CURRENT_DIR, "database.db"))
+DB_PATH = os.path.join(PROJECT_ROOT, os.getenv('DB_PATH', 'expense_tracker/db/database.db'))
 DB_URL = f"sqlite:///{DB_PATH}"
 
 """
+PROJECT_ROOT: The root directory location of this project.
 DB_PATH: The path to the SQLite database file. If not specified in the environment,
          it defaults to a file named 'database.db' in the current directory.
 DB_URL: The SQLAlchemy connection string for the database.
