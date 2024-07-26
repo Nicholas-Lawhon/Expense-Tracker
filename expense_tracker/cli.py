@@ -1,21 +1,16 @@
 from typing import List, Dict, Any, Union, Type
 from datetime import datetime
-
-from sqlalchemy import inspect
+import enum
+from sqlalchemy import inspect, Enum as SQLAlchemyEnum
 from sqlalchemy.orm import sessionmaker, Mapped
 from sqlalchemy.orm.attributes import InstrumentedAttribute
+from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 
 from expense_tracker.db.operations import BaseOperations
-from expense_tracker.db.models import Account, Transaction, Category, Budget, RecurringExpense, Base
-from expense_tracker.db.connection import get_db_engine
+from expense_tracker.db.models import Account, Transaction, Category, Budget, RecurringExpense, Base, IntervalType, TransactionType
+from expense_tracker.db.connection import get_db_engine, get_db_session
 from expense_tracker.utils.validation import check_number_range, check_string_length, user_validation_message
 from expense_tracker.utils.input_helpers import is_exit_command, EXIT_COMMANDS
-
-
-# Outline:
-# To start: User will see a menu with options to view and manage models (add, delete, update).
-# Models: Will need to view/manage Transactions, Categories, Budget, Recurring Expenses, Accounts
-# Export and import options will be available for mass uploading of transactions and data.
 
 
 class MenuDisplay:
@@ -44,12 +39,6 @@ class UserInput:
         min_value: Union[int, None] = None,
         max_value: Union[int, None] = None
     ) -> Union[int, str]:
-        """
-        Get an integer input from the user within an optional range.
-
-        Uses check_number_range() for range validation and user_validation_message() for user feedback.
-        Returns 'exit' if is_exit_command() evaluates True.
-        """
         while True:
             try:
                 value = input(prompt)
@@ -72,12 +61,6 @@ class UserInput:
         min_value: Union[float, None] = None,
         max_value: Union[float, None] = None
     ) -> Union[float, str]:
-        """
-        Get a float input from the user within an optional range.
-
-        Uses check_number_range() for range validation and user_validation_message() for user feedback.
-        Returns 'exit' if is_exit_command() evaluates True.
-        """
         while True:
             try:
                 value = input(prompt)
@@ -100,12 +83,6 @@ class UserInput:
         min_length: Union[int, None] = None,
         max_length: Union[int, None] = None
     ) -> str:
-        """
-        Get a string input from the user within an optional length range.
-
-        Uses check_string_length() for range validation and user_validation_message() for user feedback.
-        Returns 'exit' if is_exit_command() evaluates True.
-        """
         while True:
             try:
                 value = input(prompt).strip()
@@ -123,11 +100,6 @@ class UserInput:
 
     @staticmethod
     def get_date(prompt: str) -> Union[datetime.date, str]:
-        """
-        Get a date input from the user in the format YYYY-MM-DD.
-
-        Returns 'exit' if is_exit_command() evaluates True.
-        """
         while True:
             try:
                 date_string = input(prompt).strip()
@@ -145,14 +117,9 @@ class CLI:
         self.menu_display = MenuDisplay()
         self.user_input = UserInput()
         self.engine = get_db_engine()
-        self.Session = sessionmaker(bind=self.engine)
+        self.get_session = get_db_session  # Changed to the function itself, not its result
 
-    def run(self):
-        """
-        Main loop for the CLI application.
-
-        Displays the main menu and processes the user choices until exit is selected.
-        """
+    def run(self) -> None:
         while True:
             self.menu_display.show_main_menu()
             choice = self.user_input.get_int("Enter your choice: ", min_value=0, max_value=5)
@@ -163,14 +130,8 @@ class CLI:
 
             self.process_main_menu_choice(choice)
 
-    def process_main_menu_choice(self, choice: int):
-        """
-        Processes the user's main menu choice.
-
-        Args:
-            choice (int): The user's menu choice.
-        """
-        menu_actions = {
+    def process_main_menu_choice(self, choice: int) -> None:
+        menu_actions: Dict[int, Tuple[Type[Base], str]] = {
             1: (Account, "Accounts"),
             2: (Budget, "Budgets"),
             3: (Category, "Categories"),
@@ -184,14 +145,7 @@ class CLI:
         else:
             print("Invalid choice. Please try again.")
 
-    def process_sub_menu_choice(self, model: Type[Base], model_name: str):
-        """
-        Process the submenu choices for a specific model.
-
-        Args:
-             model (Type[Base]): The SQLAlchemy model class to manage.
-             model_name (str): The display name for the model.
-        """
+    def process_sub_menu_choice(self, model: Type[Base], model_name: str) -> None:
         while True:
             self.menu_display.show_submenu(f"Manage {model_name}",
                                            [f"View {model_name}",
@@ -205,14 +159,7 @@ class CLI:
 
             self.manage_model(model, choice)
 
-    def manage_model(self, model: Type[Base], choice: int):
-        """
-        Manage CRUD operations for a specific model based on user choice.
-
-        Args:
-             model (Type[Base]): The SQLAlchemy model class to manage.
-             choice (int): The user's choice of operation.
-        """
+    def manage_model(self, model: Type[Base], choice: int) -> None:
         model_actions = {
             1: lambda m: self.view_items(m),
             2: lambda m: self.add_item(m),
@@ -226,14 +173,8 @@ class CLI:
         else:
             print("Invalid choice. Please try again.")
 
-    def view_items(self, model: Type[Base]):
-        """
-        Display all items of a given model.
-
-        Args:
-            model (Type[Base]): The SQLAlchemy model class to view.
-        """
-        with self.Session() as session:
+    def view_items(self, model: Type[Base]) -> None:
+        with self.get_session() as session:
             items, total = BaseOperations.get_all(session, model)
             if items:
                 print(f"\nTotal {model.__name__} Items: {total}")
@@ -242,87 +183,77 @@ class CLI:
             else:
                 print(f"No {model.__name__} items found.")
 
-    def add_item(self, model: Type[Base]):
-        """
-        Add a new item of a given model.
-
-        Args:
-            model (Type[Base]): The SQLAlchemy model class to add an item to.
-        """
-        print(f"Attempting to add a new {model.__name__}")  # Debug print
+    def add_item(self, model: Type[Base]) -> None:
+        print(f"Attempting to add a new {model.__name__}")
         attributes = self.get_model_input(model)
-        print(f"Received attributes: {attributes}")  # Debug print
+        print(f"Received attributes: {attributes}")
         if attributes:
             try:
-                with self.Session() as session:
+                with self.get_session() as session:
                     new_item = BaseOperations.create(session, model, **attributes)
                     print(f"\nNew {model.__name__} added successfully:")
                     print(self.format_item(new_item))
+            except IntegrityError as e:
+                print(f"Database integrity error: {str(e)}")
+            except SQLAlchemyError as e:
+                print(f"Database error: {str(e)}")
             except Exception as e:
-                print(f"Error creating new {model.__name__}: {str(e)}")
+                print(f"An unexpected error occurred: {str(e)}")
         else:
             print(f"No attributes provided for new {model.__name__}. Cancelling addition.")
 
-    def update_item(self, model: Type[Base]):
-        """
-        Update an existing item of a given model.
-
-        Args:
-            model (Type[Base]): The SQLAlchemy model class to update an item from.
-        """
+    def update_item(self, model: Type[Base]) -> None:
         item_id = self.user_input.get_int(f"Enter the ID of the {model.__name__} to update: ")
-        with self.Session() as session:
-            item = BaseOperations.read(session, model, item_id)
-            if item:
-                print(f"\nCurrent values:")
-                print(CLI.format_item(item))
-                attributes = self.get_model_input(model, for_update=True)
-                if attributes:
-                    updated_item = BaseOperations.update(session, model, item_id, **attributes)
-                    print(f"\n{model.__name__} updated successfully:")
-                    print(CLI.format_item(updated_item))
-            else:
-                print(f"{model.__name__} with ID {item_id} not found.")
-
-    def delete_item(self, model: Type[Base]):
-        """
-        Delete an existing item of a given model.
-
-        Args:
-            model (Type[Base]): The SQLAlchemy model class to delete an item from.
-        """
-        item_id = self.user_input.get_int(f"Enter the ID of the {model.__name__} to delete: ")
-        with self.Session() as session:
-            item = BaseOperations.read(session, model, item_id)
-            if item:
-                print(f"\nItem to delete:")
-                print(CLI.format_item(item))
-                confirm = self.user_input.get_string("Are you sure you want to delete this item? (yes/no): ")
-                if confirm.lower() == 'yes':
-                    BaseOperations.delete(session, model, item_id)
-                    print(f"{model.__name__} deleted successfully.")
+        try:
+            with self.get_session() as session:
+                item = BaseOperations.read(session, model, item_id)
+                if item:
+                    print(f"\nCurrent values:")
+                    print(CLI.format_item(item))
+                    attributes = self.get_model_input(model, for_update=True)
+                    if attributes:
+                        updated_item = BaseOperations.update(session, model, item_id, **attributes)
+                        print(f"\n{model.__name__} updated successfully:")
+                        print(CLI.format_item(updated_item))
                 else:
-                    print("Deletion canceled.")
-            else:
-                print(f"{model.__name__} with ID {item_id} not found.")
+                    print(f"{model.__name__} with ID {item_id} not found.")
+        except IntegrityError as e:
+            print(f"Database integrity error: {str(e)}")
+        except SQLAlchemyError as e:
+            print(f"Database error: {str(e)}")
+        except Exception as e:
+            print(f"An unexpected error occurred: {str(e)}")
+
+    def delete_item(self, model: Type[Base]) -> None:
+        item_id = self.user_input.get_int(f"Enter the ID of the {model.__name__} to delete: ")
+        try:
+            with self.get_session() as session:
+                item = BaseOperations.read(session, model, item_id)
+                if item:
+                    print(f"\nItem to delete:")
+                    print(CLI.format_item(item))
+                    confirm = self.user_input.get_string("Are you sure you want to delete this item? (yes/no): ")
+                    if confirm.lower() == 'yes':
+                        BaseOperations.delete(session, model, item_id)
+                        print(f"{model.__name__} deleted successfully.")
+                    else:
+                        print("Deletion canceled.")
+                else:
+                    print(f"{model.__name__} with ID {item_id} not found.")
+        except IntegrityError as e:
+            print(f"Database integrity error: {str(e)}")
+        except SQLAlchemyError as e:
+            print(f"Database error: {str(e)}")
+        except Exception as e:
+            print(f"An unexpected error occurred: {str(e)}")
 
     def get_model_input(self, model: Type[Base], for_update: bool = False) -> Dict[str, Any]:
-        """
-        Get user input for a model's attributes.
-
-        Args:
-            model (Type[Base]): The SQLAlchemy model class.
-            for_update (bool): Whether this input is for an update operation.
-
-        Returns:
-            Dict[str, Any]: Dictionary of attribute names and values.
-        """
-        print(f"Getting input for {model.__name__}")  # Debug print
-        input_data = {}
+        print(f"Getting input for {model.__name__}")
+        input_data: Dict[str, Any] = {}
         mapper = inspect(model)
         for attr_name, attr in mapper.column_attrs.items():
-            print(f"Checking attribute: {attr_name}")  # Debug print
-            if attr_name != 'id':  # Skip the 'id' attribute
+            print(f"Checking attribute: {attr_name}")
+            if attr_name != 'id':
                 if for_update:
                     update = self.user_input.get_string(f"Update {attr_name}? (yes/no): ")
                     if update.lower() != 'yes':
@@ -330,23 +261,40 @@ class CLI:
 
                 column = attr.columns[0]
                 attr_type = column.type.python_type
-                print(f"Attribute {attr_name} is of type {attr_type}")  # Debug print
+                print(f"Attribute {attr_name} is of type {attr_type}")
 
                 while True:
-                    value = None
+                    value: Any = None
                     if attr_type == int:
                         value = self.user_input.get_int(f"Enter {attr_name}: ")
                     elif attr_type == float:
                         value = self.user_input.get_float(f"Enter {attr_name}: ")
                     elif attr_type == str:
-                        value = self.user_input.get_string(f"Enter {attr_name}: ")
+                        if isinstance(column.type, SQLAlchemyEnum):
+                            enum_class = column.type.enum_class
+                            print(f"Available options for {attr_name}:")
+                            for enum_value in enum_class:
+                                print(f"- {enum_value.name}")
+                            value = self.user_input.get_string(f"Enter {attr_name} (one of the above options): ")
+                            try:
+                                value = enum_class[value.upper()]
+                            except KeyError:
+                                print(f"Invalid option for {attr_name}. Please try again.")
+                                continue
+                        else:
+                            value = self.user_input.get_string(f"Enter {attr_name}: ")
                     elif attr_type == datetime.date:
-                        value = self.user_input.get_date(f"Enter {attr_name} (YYYY-MM-DD): ")
+                        while True:
+                            try:
+                                value = self.user_input.get_date(f"Enter {attr_name} (YYYY-MM-DD): ")
+                                break
+                            except ValueError:
+                                print("Invalid date format. Please use YYYY-MM-DD.")
                     else:
                         print(f"Unsupported attribute type for {attr_name}. Skipping.")
                         break
 
-                    print(f"Received value for {attr_name}: {value}")  # Debug print
+                    print(f"Received value for {attr_name}: {value}")
 
                     if value == 'exit':
                         return {}
@@ -357,60 +305,38 @@ class CLI:
                     else:
                         print(f"Invalid input for {attr_name}. Please try again.")
 
-        print(f"Returning input data: {input_data}")  # Debug print
+        print(f"Returning input data: {input_data}")
         return input_data
 
     @staticmethod
     def validate_input(model: Type[Base], attr: str, value: Any) -> bool:
-        """
-        Validate user input for a specific model attribute.
-
-        Args:
-             model (Type[Base]): The SQL Alchemy model class.
-             attr (str): The attribute name.
-             value (Any): The input value to validate.
-
-        Returns:
-            bool: True if the input is valid, False otherwise.
-        """
-        # TODO: Implement validation logic using methods from validation.py.
-        # For now, assumes all input is valid.
-        return True
+        # TODO: Implement more robust validation logic
+        if attr == 'name' and isinstance(value, str):
+            return len(value) > 0
+        elif attr in ['amount', 'balance'] and isinstance(value, (int, float)):
+            return value >= 0
+        elif attr == 'date' and isinstance(value, datetime.date):
+            return value <= datetime.date.today()
+        elif attr in ['type', 'interval'] and isinstance(value, enum.Enum):
+            return True
+        return True  # Default to True for unhandled cases
 
     @staticmethod
     def get_model_attributes(model: Type[Base]) -> List[str]:
-        """
-        Get the attributes of a given model.
-
-        Args:
-            model (Type[Base]): The SQLAlchemy model class.
-
-        Returns:
-            List[str]: List of attribute names.
-        """
         return [attr for attr in dir(model) if not attr.startswith('_') and attr != 'id' and not callable(getattr(model, attr))]
 
     @staticmethod
     def format_item(item: Base) -> str:
-        """
-        Format an item for display.
-
-        Args:
-             item (Base): The SQLAlchemy model instance to format.
-
-        Returns:
-            str: A formatted string representation of the item.
-        """
         attributes = inspect(item).attrs
-        output = [f"ID: {item.id}"]  # Always include the ID first
+        output = [f"ID: {item.id}"]
 
         for attr_name, attr in attributes.items():
-            if attr_name not in ['metadata', 'registry']:  # Exclude these attributes
+            if attr_name not in ['metadata', 'registry']:
                 value = getattr(item, attr_name)
                 if isinstance(value, list):
-                    if value:  # Only include non-empty lists
+                    if value:
                         output.append(f"{attr_name}: {len(value)} items")
-                elif value is not None:  # Only include non-None values
+                elif value is not None:
                     output.append(f"{attr_name}: {value}")
 
         return " | ".join(output)

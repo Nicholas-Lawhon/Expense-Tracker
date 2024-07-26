@@ -1,4 +1,4 @@
-from .connection import get_db_engine, create_tables
+from .connection import get_db_engine, create_tables, drop_tables
 from .models import Transaction
 
 """

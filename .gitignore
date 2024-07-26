@@ -6,8 +6,12 @@ ENV/
 # Enviornment Variables
 .env
 
-# Database Logs
+# Database
+*.db
+*.sqlite
+*.sqlite3
 logs/
+generate_db_key.py
 
 # Pychache
 **/__pycache__/
@@ -17,8 +21,8 @@ alembic/versions/*.py
 !alembic/versions/.gitkeep
 
 # IDE specific files
-.vscode/
 .idea/
+.vscode/
 
 # OS specific files
 .DS_Store
