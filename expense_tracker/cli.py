@@ -4,13 +4,21 @@ import enum
 from sqlalchemy import inspect, Enum as SQLAlchemyEnum
 from sqlalchemy.orm import sessionmaker, Mapped
 from sqlalchemy.orm.attributes import InstrumentedAttribute
-from sqlalchemy.exc import SQLAlchemyError, IntegrityError
+from sqlalchemy.exc import SQLAlchemyError, IntegrityError, NoResultFound
 
 from expense_tracker.db.operations import BaseOperations
 from expense_tracker.db.models import Account, Transaction, Category, Budget, RecurringExpense, Base, IntervalType, TransactionType
 from expense_tracker.db.connection import get_db_engine, get_db_session
 from expense_tracker.utils.validation import check_number_range, check_string_length, user_validation_message
-from expense_tracker.utils.input_helpers import is_exit_command, EXIT_COMMANDS
+from expense_tracker.utils.input_helpers import (
+    UserInput, is_exit_command, EXIT_COMMANDS, display_model_instances,
+    get_model_instance_id, get_related_instance_id, get_enum_value,
+    validate_string, validate_number, validate_date, validate_enum
+)
+from expense_tracker.utils.logger import setup_logger
+
+
+logger = setup_logger('cli', 'cli.log')
 
 
 class MenuDisplay:
@@ -32,103 +40,27 @@ class MenuDisplay:
         print("0. Back to Main Menu")
 
 
-class UserInput:
-    @staticmethod
-    def get_int(
-        prompt: str,
-        min_value: Union[int, None] = None,
-        max_value: Union[int, None] = None
-    ) -> Union[int, str]:
-        while True:
-            try:
-                value = input(prompt)
-                if is_exit_command(value):
-                    return 'exit'
-
-                int_value = int(value)
-                if (min_value is not None or max_value is not None) and not check_number_range(int_value, min_value, max_value):
-                    print(user_validation_message(int_value, min_value, max_value))
-                else:
-                    return int_value
-            except ValueError:
-                print(f"Invalid input. Please enter a valid number (integer) or {' / '.join(EXIT_COMMANDS)} to quit.")
-            except (EOFError, KeyboardInterrupt):
-                print(f"\nInput interrupted. Please try again or type {' / '.join(EXIT_COMMANDS)} to quit.")
-
-    @staticmethod
-    def get_float(
-        prompt: str,
-        min_value: Union[float, None] = None,
-        max_value: Union[float, None] = None
-    ) -> Union[float, str]:
-        while True:
-            try:
-                value = input(prompt)
-                if is_exit_command(value):
-                    return 'exit'
-
-                float_value = float(value)
-                if (min_value is not None or max_value is not None) and not check_number_range(float_value, min_value, max_value):
-                    print(user_validation_message(float_value, min_value, max_value))
-                else:
-                    return float_value
-            except ValueError:
-                print(f"Invalid input. Please enter a valid number (float) or {' / '.join(EXIT_COMMANDS)} to quit.")
-            except (EOFError, KeyboardInterrupt):
-                print(f"\nInput interrupted. Please try again or type {' / '.join(EXIT_COMMANDS)} to quit.")
-
-    @staticmethod
-    def get_string(
-        prompt: str,
-        min_length: Union[int, None] = None,
-        max_length: Union[int, None] = None
-    ) -> str:
-        while True:
-            try:
-                value = input(prompt).strip()
-                if is_exit_command(value):
-                    return 'exit'
-
-                if (min_length is not None or max_length is not None) and not check_string_length(value, min_length, max_length):
-                    print(user_validation_message(value, min_length, max_length))
-                else:
-                    return value
-            except ValueError:
-                print(f"Invalid input. Please try again or type {' / '.join(EXIT_COMMANDS)} to quit.")
-            except (EOFError, KeyboardInterrupt):
-                print(f"\nInput interrupted. Please try again or type {' / '.join(EXIT_COMMANDS)} to quit.")
-
-    @staticmethod
-    def get_date(prompt: str) -> Union[datetime.date, str]:
-        while True:
-            try:
-                date_string = input(prompt).strip()
-                if is_exit_command(date_string):
-                    return 'exit'
-                return datetime.strptime(date_string, "%Y-%m-%d").date()
-            except ValueError:
-                print(f"Invalid date format. Please use YYYY-MM-DD or {' / '.join(EXIT_COMMANDS)} to quit.")
-            except (EOFError, KeyboardInterrupt):
-                print(f"\nInput interrupted. Please try again or type {' / '.join(EXIT_COMMANDS)} to quit.")
-
-
 class CLI:
     def __init__(self):
         self.menu_display = MenuDisplay()
         self.user_input = UserInput()
         self.engine = get_db_engine()
-        self.get_session = get_db_session  # Changed to the function itself, not its result
+        self.get_session = get_db_session
 
     def run(self) -> None:
         while True:
-            self.menu_display.show_main_menu()
-            choice = self.user_input.get_int("Enter your choice: ", min_value=0, max_value=5)
+            try:
+                self.menu_display.show_main_menu()
+                choice = self.user_input.get_int("Enter your choice: ", min_value=0, max_value=5)
 
-            if choice == 0 or is_exit_command(str(choice)):
-                print("Exiting the application. Goodbye!")
-                break
+                if choice == 0 or is_exit_command(str(choice)):
+                    print("Exiting the application. Goodbye!")
+                    break
 
-            self.process_main_menu_choice(choice)
+                self.process_main_menu_choice(choice)
+            except Exception as e:
+                logger.error(f"An error occurred in the main loop: {str(e)}")
+                print("An unexpected error occurred. Please try again")
 
     def process_main_menu_choice(self, choice: int) -> None:
         menu_actions: Dict[int, Tuple[Type[Base], str]] = {
@@ -184,9 +116,7 @@ class CLI:
                 print(f"No {model.__name__} items found.")
 
     def add_item(self, model: Type[Base]) -> None:
-        print(f"Attempting to add a new {model.__name__}")
         attributes = self.get_model_input(model)
-        print(f"Received attributes: {attributes}")
         if attributes:
             try:
                 with self.get_session() as session:
@@ -248,82 +178,83 @@ class CLI:
             print(f"An unexpected error occurred: {str(e)}")
 
     def get_model_input(self, model: Type[Base], for_update: bool = False) -> Dict[str, Any]:
-        print(f"Getting input for {model.__name__}")
-        input_data: Dict[str, Any] = {}
+        input_data = {}
         mapper = inspect(model)
+
         for attr_name, attr in mapper.column_attrs.items():
-            print(f"Checking attribute: {attr_name}")
-            if attr_name != 'id':
-                if for_update:
-                    update = self.user_input.get_string(f"Update {attr_name}? (yes/no): ")
-                    if update.lower() != 'yes':
-                        continue
+            if attr_name == 'id':
+                continue
 
-                column = attr.columns[0]
-                attr_type = column.type.python_type
-                print(f"Attribute {attr_name} is of type {attr_type}")
+            if for_update:
+                update = self.user_input.get_string(f"Update {attr_name}? (yes/no): ")
+                if update.lower() != 'yes':
+                    continue
 
-                while True:
-                    value: Any = None
-                    if attr_type == int:
-                        value = self.user_input.get_int(f"Enter {attr_name}: ")
-                    elif attr_type == float:
-                        value = self.user_input.get_float(f"Enter {attr_name}: ")
-                    elif attr_type == str:
-                        if isinstance(column.type, SQLAlchemyEnum):
-                            enum_class = column.type.enum_class
-                            print(f"Available options for {attr_name}:")
-                            for enum_value in enum_class:
-                                print(f"- {enum_value.name}")
-                            value = self.user_input.get_string(f"Enter {attr_name} (one of the above options): ")
-                            try:
-                                value = enum_class[value.upper()]
-                            except KeyError:
-                                print(f"Invalid option for {attr_name}. Please try again.")
-                                continue
-                        else:
-                            value = self.user_input.get_string(f"Enter {attr_name}: ")
-                    elif attr_type == datetime.date:
-                        while True:
-                            try:
-                                value = self.user_input.get_date(f"Enter {attr_name} (YYYY-MM-DD): ")
-                                break
-                            except ValueError:
-                                print("Invalid date format. Please use YYYY-MM-DD.")
-                    else:
-                        print(f"Unsupported attribute type for {attr_name}. Skipping.")
-                        break
+            column = attr.columns[0]
+            value = self.get_attribute_value(model, attr_name, column)
 
-                    print(f"Received value for {attr_name}: {value}")
+            if value == 'exit':
+                return {}
 
-                    if value == 'exit':
-                        return {}
+            if value is not None:
+                if self.validate_input(model, attr_name, value):
+                    input_data[attr_name] = value
+            else:
+                print(f"Invalid input for {attr_name}. Please try again.")
+                continue
 
-                    if value is not None and self.validate_input(model, attr_name, value):
-                        input_data[attr_name] = value
-                        break
-                    else:
-                        print(f"Invalid input for {attr_name}. Please try again.")
-
-        print(f"Returning input data: {input_data}")
         return input_data
 
-    @staticmethod
-    def validate_input(model: Type[Base], attr: str, value: Any) -> bool:
-        # TODO: Implement more robust validation logic
-        if attr == 'name' and isinstance(value, str):
-            return len(value) > 0
-        elif attr in ['amount', 'balance'] and isinstance(value, (int, float)):
-            return value >= 0
-        elif attr == 'date' and isinstance(value, datetime.date):
-            return value <= datetime.date.today()
-        elif attr in ['type', 'interval'] and isinstance(value, enum.Enum):
-            return True
-        return True  # Default to True for unhandled cases
+    def validate_input(self, model: Type[Base], attr: str, value: Any) -> bool:
+        try:
+            if attr == 'name':
+                return validate_string(value)
+            elif attr in ['amount', 'balance']:
+                return validate_number(value)
+            elif attr == 'date':
+                return validate_date(value)
+            elif attr in ['type', 'interval']:
+                return validate_enum(value)
+            else:
+                # For attributes we don't have specific validation for, we'll consider them valid
+                return True
+        except Exception as e:
+            logger.error(f"Error validating {attr}: {str(e)}")
+            return False
 
-    @staticmethod
-    def get_model_attributes(model: Type[Base]) -> List[str]:
-        return [attr for attr in dir(model) if not attr.startswith('_') and attr != 'id' and not callable(getattr(model, attr))]
+    def get_attribute_value(self, model: Type[Base], attr_name: str, column: Any) -> Any:
+        try:
+            if column.foreign_keys:
+                return self.handle_foreign_key(column)
+            elif isinstance(column.type, SQLAlchemyEnum):
+                return self.handle_enum(column.type.enum_class, attr_name)
+            else:
+                return self.handle_basic_type(attr_name, column.type.python_type)
+        except Exception as e:
+            logger.error(f"Error getting attribute value for {attr_name}: {str(e)}")
+            return None
+
+    def handle_foreign_key(self, column: Any) -> Any:
+        related_model = list(column.foreign_keys)[0].column.table
+        with self.get_session() as session:
+            return get_related_instance_id(session, related_model)
+
+    def handle_enum(self, enum_class: Type[enum.Enum], attr_name: str) -> Any:
+        return get_enum_value(enum_class, f"Enter {attr_name} (one of the above options): ")
+
+    def handle_basic_type(self, attr_name: str, attr_type: Type) -> Any:
+        if attr_type == int:
+            return self.user_input.get_int(f"Enter {attr_name}: ")
+        elif attr_type == float:
+            return self.user_input.get_float(f"Enter {attr_name}: ")
+        elif attr_type == str:
+            return self.user_input.get_string(f"Enter {attr_name}: ")
+        elif attr_type == datetime.date:
+            return self.user_input.get_date(f"Enter {attr_name} (YYYY-MM-DD): ")
+        else:
+            logger.warning(f"Unsupported attribute type for {attr_name}. Skipping.")
+            print(f"Unsupported attribute type for {attr_name}. Skipping.")
+            return None
 
     @staticmethod
     def format_item(item: Base) -> str:
