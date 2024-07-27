@@ -18,16 +18,6 @@ if __name__ == "__main__":
         engine = get_db_engine()
         existing_tables = check_tables(engine)
 
-        # Option to drop all tables and recreate them
-        if existing_tables:
-            logger.info("Existing tables found. Do you want to drop all tables and recreate them? (yes/no)")
-            print("Existing tables found. Do you want to drop all tables and recreate them? (yes/no)")
-            response = input().lower()
-            if response == 'yes':
-                logger.info("Dropping all existing tables...")
-                drop_tables(engine)
-                existing_tables = []
-
         if not existing_tables:
             logger.info("No tables found. Creating tables...")
             create_tables(engine)
