@@ -1,29 +1,10 @@
 import os
 from dotenv import load_dotenv
+from expense_tracker.utils.crypto import decrypt_value
 
-"""
-This module handles configuration settings for the database connection.
-
-It uses environment variables to set up the database path, allowing for
-flexible configuration across different environments.
-"""
-
-# Load environment variables from .env file
 load_dotenv()
 
-# Get the directory of the current file
-CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+encryption_key = os.getenv('ENCRYPTION_KEY').encode()
+db_password = decrypt_value(encryption_key, os.getenv('DB_PASSWORD'))
 
-# Get the project root directory (two levels up from this file)
-PROJECT_ROOT = os.path.dirname(os.path.dirname(CURRENT_DIR))
-
-# Construct the path to the database file, using an environment variable
-DB_PATH = os.path.join(PROJECT_ROOT, os.getenv('DB_PATH', 'expense_tracker/db/database.db'))
-DB_URL = f"sqlite:///{DB_PATH}"
-
-"""
-PROJECT_ROOT: The root directory location of this project.
-DB_PATH: The path to the SQLite database file. If not specified in the environment,
-         it defaults to a file named 'database.db' in the current directory.
-DB_URL: The SQLAlchemy connection string for the database.
-"""
+DB_URL = f"mysql+mysqlconnector://{os.getenv('DB_USER')}:{db_password}@{os.getenv('DB_HOST')}:{os.getenv('DB_PORT', '3306')}/{os.getenv('DB_NAME')}"

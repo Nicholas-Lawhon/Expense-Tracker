@@ -1,8 +1,9 @@
 from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 from sqlalchemy.exc import SQLAlchemyError
-from .config import DB_URL
-from .models import Base
-from ..utils.logger import setup_logger
+from expense_tracker.db.config import DB_URL
+from expense_tracker.db.models import Base
+from expense_tracker.utils.logger import setup_logger
 
 """
 This module handles database connection and table creation.
@@ -12,6 +13,7 @@ It provides functions to create a database engine and initialize the database sc
 
 # Set up logging
 logger = setup_logger('database', 'database.log')
+
 
 def get_db_engine():
     """
@@ -31,6 +33,26 @@ def get_db_engine():
         logger.error(f"Error creating database engine: {e}")
         raise
 
+
+def get_db_session():
+    """
+    Create and return a new database session.
+
+    Returns:
+      session: SQLAlchemy session object
+
+    Raises:
+      SQLAlchemyError: If there's an error creating the session
+    """
+    try:
+        engine = get_db_engine()
+        SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+        return SessionLocal()
+    except SQLAlchemyError as e:
+        logger.error(f"Error creating database session: {e}")
+        raise
+
+
 def create_tables(engine=None):
     """
     Create all tables defined in the models.
@@ -41,14 +63,24 @@ def create_tables(engine=None):
         SQLAlchemyError: If there's an error creating the tables
     """
     try:
-        if engine is None:
-            engine = get_db_engine()
-        Base.metadata.create_all(engine)
-        logger.info("Tables created successfully")
-        return engine
-    except SQLAlchemyError as e:
-        logger.error(f"Error creating tables: {e}")
+        logger.info("Starting table creation...")
+        tables = Base.metadata.sorted_tables
+        for table in tables:
+            try:
+                logger.info(f"Attempting to create table: {table.name}")
+                table.create(engine, checkfirst=True)
+                logger.info(f"Successfully created table: {table.name}")
+            except SQLAlchemyError as e:
+                logger.error(f"Error creating table {table.name}: {str(e)}")
+        logger.info("Finished table creation process")
+    except Exception as e:
+        logger.error(f"Unexpected error during table creation: {str(e)}")
         raise
+
+
+def drop_tables(engine):
+    Base.metadata.drop_all(engine)
+    logger.info("All tables dropped")
 
 
 if __name__ == '__main__':
