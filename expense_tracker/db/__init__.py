@@ -1,5 +1,5 @@
 from .connection import get_db_engine, create_tables, drop_tables
-from .models import Transaction
+from expense_tracker.models import Transaction
 
 """
 This module initializes the database package.

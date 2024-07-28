@@ -6,7 +6,7 @@ from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 
 from expense_tracker.utils.logger import setup_logger
 from expense_tracker.db.operations import BaseOperations
-from expense_tracker.db.models import Account, Transaction, Category, Budget, Base, IntervalType, TransactionType
+from expense_tracker.models import Account, Transaction, Category, Budget, Base, IntervalType, TransactionType
 from expense_tracker.db.connection import get_db_engine, get_db_session
 from expense_tracker.utils.input_helpers import (
     UserInput, is_exit_command, get_related_instance_id, get_enum_value,

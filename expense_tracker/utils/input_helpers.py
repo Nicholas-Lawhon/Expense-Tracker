@@ -4,7 +4,7 @@ import enum
 from sqlalchemy.orm import Session
 from sqlalchemy import inspect
 
-from expense_tracker.db.models import Base
+from expense_tracker.models import Base
 from expense_tracker.db.operations import BaseOperations
 from expense_tracker.utils.validation import check_number_range, check_string_length, user_validation_message
 
