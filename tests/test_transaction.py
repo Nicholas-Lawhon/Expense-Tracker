@@ -1,7 +1,7 @@
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from expense_tracker.db.models import Base, Transaction, TransactionType
+from expense_tracker.models import Base, Transaction, TransactionType, IntervalType
 from expense_tracker.db.operations import BaseOperations
 from datetime import date, timedelta
 
@@ -35,13 +35,18 @@ def test_create_transaction(dbsession):
         name="Test Transaction",
         amount=100.00,
         type=TransactionType.EXPENSE,
-        date=date.today()
+        date=date.today(),
+        description="Test Transaction Description",
+        interval=IntervalType.ONCE
     )
 
     # Check if the transaction was created
     assert new_transaction.id is not None
     assert new_transaction.name == "Test Transaction"
     assert new_transaction.amount == 100.00
+    assert new_transaction.type == TransactionType.EXPENSE
+    assert new_transaction.description == "Test Transaction Description"
+    assert new_transaction.interval == IntervalType.ONCE
 
 def test_read_transaction(dbsession):
     # Create a transaction
@@ -51,7 +56,9 @@ def test_read_transaction(dbsession):
         name="Read Test",
         amount=50.00,
         type=TransactionType.INCOME,
-        date=date.today()
+        date=date.today(),
+        description="Read Description Test",
+        interval=IntervalType.ONCE
     )
 
     # Read the transaction
@@ -61,6 +68,9 @@ def test_read_transaction(dbsession):
     assert read_transaction is not None
     assert read_transaction.name == "Read Test"
     assert read_transaction.amount == 50.00
+    assert read_transaction.type == TransactionType.INCOME
+    assert read_transaction.description == "Read Description Test"
+    assert read_transaction.interval == IntervalType.ONCE
 
 def test_update_transaction(dbsession):
     # Create a transaction
@@ -70,7 +80,9 @@ def test_update_transaction(dbsession):
         name="Update Test",
         amount=75.00,
         type=TransactionType.EXPENSE,
-        date=date.today()
+        date=date.today(),
+        description="Update Transaction Description",
+        interval=IntervalType.ONCE
     )
 
     # Update the transaction
@@ -79,14 +91,19 @@ def test_update_transaction(dbsession):
         Transaction,
         transaction.id,
         name="Updated Transaction",
-        amount=100.00
+        amount=100.00,
+        type=TransactionType.RECURRING_EXPENSE,
+        description="Updated Transaction Description",
+        interval=IntervalType.MONTHLY
     )
 
     # Check if the transaction was updated
     assert updated_transaction is not None
     assert updated_transaction.name == "Updated Transaction"
     assert updated_transaction.amount == 100.00
-    assert updated_transaction.type == TransactionType.EXPENSE  # Unchanged field
+    assert updated_transaction.type == TransactionType.RECURRING_EXPENSE
+    assert updated_transaction.description == "Updated Transaction Description"
+    assert updated_transaction.interval == IntervalType.MONTHLY
 
 def test_delete_transaction(dbsession):
     # Create a transaction

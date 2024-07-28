@@ -1,21 +1,17 @@
-from typing import List, Dict, Any, Union, Type
-from datetime import datetime
+from typing import List, Dict, Any, Type, Tuple
+from datetime import datetime, date
 import enum
 from sqlalchemy import inspect, Enum as SQLAlchemyEnum
-from sqlalchemy.orm import sessionmaker, Mapped
-from sqlalchemy.orm.attributes import InstrumentedAttribute
-from sqlalchemy.exc import SQLAlchemyError, IntegrityError, NoResultFound
+from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 
+from expense_tracker.utils.logger import setup_logger
 from expense_tracker.db.operations import BaseOperations
-from expense_tracker.db.models import Account, Transaction, Category, Budget, RecurringExpense, Base, IntervalType, TransactionType
+from expense_tracker.models import Account, Transaction, Category, Budget, Base, IntervalType, TransactionType
 from expense_tracker.db.connection import get_db_engine, get_db_session
-from expense_tracker.utils.validation import check_number_range, check_string_length, user_validation_message
 from expense_tracker.utils.input_helpers import (
-    UserInput, is_exit_command, EXIT_COMMANDS, display_model_instances,
-    get_model_instance_id, get_related_instance_id, get_enum_value,
+    UserInput, is_exit_command, get_related_instance_id, get_enum_value,
     validate_string, validate_number, validate_date, validate_enum
 )
-from expense_tracker.utils.logger import setup_logger
 
 
 logger = setup_logger('cli', 'cli.log')
@@ -28,8 +24,7 @@ class MenuDisplay:
         print("1. Manage Accounts")
         print("2. Manage Budgets")
         print("3. Manage Categories")
-        print("4. Manage Recurring Expenses")
-        print("5. Manage Transactions")
+        print("4. Manage Transactions")
         print("0. Exit")
 
     @staticmethod
@@ -51,7 +46,7 @@ class CLI:
         while True:
             try:
                 self.menu_display.show_main_menu()
-                choice = self.user_input.get_int("Enter your choice: ", min_value=0, max_value=5)
+                choice = self.user_input.get_int("Enter your choice: ", min_value=0, max_value=4)
 
                 if choice == 0 or is_exit_command(str(choice)):
                     print("Exiting the application. Goodbye!")
@@ -67,8 +62,7 @@ class CLI:
             1: (Account, "Accounts"),
             2: (Budget, "Budgets"),
             3: (Category, "Categories"),
-            4: (RecurringExpense, "Recurring Expenses"),
-            5: (Transaction, "Transactions"),
+            4: (Transaction, "Transactions"),
         }
 
         action = menu_actions.get(choice)
@@ -120,6 +114,8 @@ class CLI:
         if attributes:
             try:
                 with self.get_session() as session:
+                    model_attrs = set(inspect(model).column_attrs.keys())
+                    filtered_attributes = {k: v for k, v in attributes.items() if k in model_attrs}
                     new_item = BaseOperations.create(session, model, **attributes)
                     print(f"\nNew {model.__name__} added successfully:")
                     print(self.format_item(new_item))
@@ -133,7 +129,8 @@ class CLI:
             print(f"No attributes provided for new {model.__name__}. Cancelling addition.")
 
     def update_item(self, model: Type[Base]) -> None:
-        item_id = self.user_input.get_int(f"Enter the ID of the {model.__name__} to update: ")
+        self.view_items(model)
+        item_id = self.user_input.get_int(f"\nEnter the ID of the {model.__name__} to update: ")
         try:
             with self.get_session() as session:
                 item = BaseOperations.read(session, model, item_id)
@@ -155,7 +152,8 @@ class CLI:
             print(f"An unexpected error occurred: {str(e)}")
 
     def delete_item(self, model: Type[Base]) -> None:
-        item_id = self.user_input.get_int(f"Enter the ID of the {model.__name__} to delete: ")
+        self.view_items(model)
+        item_id = self.user_input.get_int(f"\nEnter the ID of the {model.__name__} to delete: ")
         try:
             with self.get_session() as session:
                 item = BaseOperations.read(session, model, item_id)
@@ -181,8 +179,15 @@ class CLI:
         input_data = {}
         mapper = inspect(model)
 
-        for attr_name, attr in mapper.column_attrs.items():
+        for attr in mapper.column_attrs:
+            attr_name = attr.key
             if attr_name == 'id':
+                continue
+
+            column = attr.columns[0]
+            is_optional = column.nullable
+
+            if model == Transaction and attr_name in ['interval', 'billing_date']:
                 continue
 
             if for_update:
@@ -190,7 +195,12 @@ class CLI:
                 if update.lower() != 'yes':
                     continue
 
-            column = attr.columns[0]
+            elif is_optional and attr_name != 'billing_date':
+                include = self.user_input.get_string(f"Include {attr_name}? (yes/no): ")
+                if include.lower() != 'yes':
+                    input_data[attr_name] = None
+                    continue
+
             value = self.get_attribute_value(model, attr_name, column)
 
             if value == 'exit':
@@ -199,6 +209,15 @@ class CLI:
             if value is not None:
                 if self.validate_input(model, attr_name, value):
                     input_data[attr_name] = value
+
+                    if model == Transaction and attr_name == 'type':
+                        interval = self.get_interval()
+                        input_data['interval'] = interval
+                        if interval != IntervalType.ONCE:
+                            billing_date = self.get_billing_date()
+                            input_data['billing_date'] = billing_date
+                        else:
+                            input_data['billing_date'] = None
             else:
                 print(f"Invalid input for {attr_name}. Please try again.")
                 continue
@@ -211,16 +230,21 @@ class CLI:
                 return validate_string(value)
             elif attr in ['amount', 'balance']:
                 return validate_number(value)
-            elif attr == 'date':
+            elif attr in ['date', 'billing_date']:
                 return validate_date(value)
             elif attr in ['type', 'interval']:
                 return validate_enum(value)
             else:
-                # For attributes we don't have specific validation for, we'll consider them valid
                 return True
         except Exception as e:
             logger.error(f"Error validating {attr}: {str(e)}")
             return False
+
+    def get_interval(self) -> IntervalType:
+        return get_enum_value(IntervalType, "Enter the interval for the transaction: ")
+
+    def get_billing_date(self) -> date:
+        return self.user_input.get_date("Enter the billing date for recurring transaction (YYYY-MM-DD): ")
 
     def get_attribute_value(self, model: Type[Base], attr_name: str, column: Any) -> Any:
         try:
@@ -234,13 +258,20 @@ class CLI:
             logger.error(f"Error getting attribute value for {attr_name}: {str(e)}")
             return None
 
+    def get_model_class_for_table(self, table):
+        for model in Base.__subclasses__():
+            if model.__table__ == table:
+                return model
+        raise ValueError(f"No model found for table {table.name}")
+
     def handle_foreign_key(self, column: Any) -> Any:
-        related_model = list(column.foreign_keys)[0].column.table
+        related_table = list(column.foreign_keys)[0].column.table
+        related_model = self.get_model_class_for_table(related_table)
         with self.get_session() as session:
             return get_related_instance_id(session, related_model)
 
     def handle_enum(self, enum_class: Type[enum.Enum], attr_name: str) -> Any:
-        return get_enum_value(enum_class, f"Enter {attr_name} (one of the above options): ")
+        return get_enum_value(enum_class, f"Enter the number for {attr_name}: ")
 
     def handle_basic_type(self, attr_name: str, attr_type: Type) -> Any:
         if attr_type == int:
@@ -249,7 +280,7 @@ class CLI:
             return self.user_input.get_float(f"Enter {attr_name}: ")
         elif attr_type == str:
             return self.user_input.get_string(f"Enter {attr_name}: ")
-        elif attr_type == datetime.date:
+        elif attr_type == date:
             return self.user_input.get_date(f"Enter {attr_name} (YYYY-MM-DD): ")
         else:
             logger.warning(f"Unsupported attribute type for {attr_name}. Skipping.")
@@ -258,17 +289,30 @@ class CLI:
 
     @staticmethod
     def format_item(item: Base) -> str:
-        attributes = inspect(item).attrs
-        output = [f"ID: {item.id}"]
+        mapper = inspect(item).mapper
 
-        for attr_name, attr in attributes.items():
-            if attr_name not in ['metadata', 'registry']:
-                value = getattr(item, attr_name)
-                if isinstance(value, list):
-                    if value:
-                        output.append(f"{attr_name}: {len(value)} items")
-                elif value is not None:
-                    output.append(f"{attr_name}: {value}")
+        output = []
+        for attr in mapper.column_attrs:
+            attr_name = attr.key
+            display_name = attr_name.upper()
+            value = getattr(item, attr_name)
+
+            if attr_name in ['account_id', 'category_id']:
+                related_item = getattr(item, attr_name.replace('_id', ''), None)
+                if related_item:
+                    output.append(f"{display_name.replace('_id', '')}: {related_item.name} (ID: {value})")
+                else:
+                    output.append(f"{display_name}: {value if value is not None else 'None'}")
+            elif isinstance(value, list):
+                output.append(f"{display_name}: {len(value) if value else 'None'} items")
+            elif isinstance(value, Base):
+                output.append(f"{display_name}: {value.name}")
+            elif attr_name == 'amount':
+                output.append(f"{display_name}: ${value:.2f}" if value is not None else f"{attr_name}: None")
+            elif isinstance(value, enum.Enum):
+                output.append(f"{display_name}: {value.name if value else 'None'}")
+            else:
+                output.append(f"{display_name}: {value if value is not None else 'None'}")
 
         return " | ".join(output)
 

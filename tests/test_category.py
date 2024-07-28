@@ -1,7 +1,7 @@
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from expense_tracker.db.models import Base, Category
+from expense_tracker.models import Base, Category
 from expense_tracker.db.operations import BaseOperations
 
 # Setup test database

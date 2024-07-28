@@ -1,9 +1,11 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.exc import SQLAlchemyError
-from expense_tracker.db.config import DB_URL
-from expense_tracker.db.models import Base
+from expense_tracker.utils.crypto import decrypt_value
+from expense_tracker.models import Base
 from expense_tracker.utils.logger import setup_logger
+import os
+from dotenv import load_dotenv
 
 """
 This module handles database connection and table creation.
@@ -13,6 +15,14 @@ It provides functions to create a database engine and initialize the database sc
 
 # Set up logging
 logger = setup_logger('database', 'database.log')
+
+load_dotenv()
+
+
+def get_db_url():
+    encryption_key = os.getenv('ENCRYPTION_KEY').encode()
+    db_password = decrypt_value(encryption_key, os.getenv('DB_PASSWORD'))
+    return f"mysql+mysqlconnector://{os.getenv('DB_USER')}:{db_password}@{os.getenv('DB_HOST')}:{os.getenv('DB_PORT', '3306')}/{os.getenv('DB_NAME')}"
 
 
 def get_db_engine():
@@ -26,7 +36,7 @@ def get_db_engine():
         SQLAlchemyError: If there's an error creating the engine
     """
     try:
-        engine = create_engine(DB_URL)
+        engine = create_engine(get_db_url())
         logger.info("Database engine created successfully")
         return engine
     except SQLAlchemyError as e:

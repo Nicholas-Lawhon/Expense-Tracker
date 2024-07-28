@@ -4,7 +4,7 @@ from sqlalchemy import pool
 from alembic import context
 from dotenv import load_dotenv
 import os
-from expense_tracker.db.models import Base
+from expense_tracker.models import Base
 from expense_tracker.db.config import DB_URL
 
 

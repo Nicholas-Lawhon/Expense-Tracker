@@ -1,7 +1,7 @@
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from expense_tracker.db.models import Base, Account
+from expense_tracker.models import Base, Account
 from expense_tracker.db.operations import BaseOperations
 from datetime import date, timedelta
 
