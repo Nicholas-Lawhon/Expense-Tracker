@@ -26,7 +26,7 @@ if __name__ == "__main__":
         logger.info("Database setup complete.")
 
         # Check if all expected tables are created
-        expected_tables = ['accounts', 'budgets', 'categories', 'recurring_expenses', 'transactions']
+        expected_tables = ['accounts', 'budgets', 'categories', 'transactions']
         missing_tables = set(expected_tables) - set(existing_tables)
 
         if missing_tables:

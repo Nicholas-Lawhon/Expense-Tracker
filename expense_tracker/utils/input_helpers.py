@@ -29,7 +29,11 @@ def validate_number(value: float, min_value: float = 0) -> bool:
 
 
 def validate_date(value: datetime.date) -> bool:
-    return value <= datetime.date.today()
+    try:
+        datetime.strptime(str(value), "%Y-%m-%d")
+        return True
+    except ValueError:
+        return False
 
 
 def validate_enum(value: enum.Enum) -> bool:
@@ -112,7 +116,7 @@ class UserInput:
                 date_string = input(prompt).strip()
                 if is_exit_command(date_string):
                     return 'exit'
-                return datetime.strptime(date_string, "%Y-%m-%d").date()
+                return datetime.strptime(str(date_string), "%Y-%m-%d").date()
             except ValueError:
                 print(f"Invalid date format. Please use YYYY-MM-DD or {' / '.join(EXIT_COMMANDS)} to quit.")
             except (EOFError, KeyboardInterrupt):
@@ -153,13 +157,14 @@ def get_related_instance_id(session: Session, model: Type[Base]) -> Union[int, s
 
 def get_enum_value(enum_class: Type[enum.Enum], prompt: str) -> Any:
     print(f"Available options for {enum_class.__name__}:")
-    for enum_value in enum_class:
-        print(f"- {enum_value.name}")
+    for i, enum_value in enumerate(enum_class, 1):
+        print(f"{i}. {enum_value.name}")
+
     while True:
-        value = UserInput.get_string(prompt)
-        if is_exit_command(value):
+        choice = UserInput.get_int(prompt, min_value=1, max_value=len(enum_class))
+        if is_exit_command(str(choice)):
             return 'exit'
         try:
-            return enum_class[value.upper()]
-        except KeyError:
-            print(f"Invalid option for {enum_class.__name__}. Please try again.")
+            return list(enum_class)[choice - 1]
+        except IndexError:
+            print(f"Invalid choice. Please enter a number between 1 and {len(enum_class)}")
