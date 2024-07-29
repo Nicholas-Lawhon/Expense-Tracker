@@ -3,21 +3,21 @@ from sqlalchemy import engine_from_config
 from sqlalchemy import pool
 from alembic import context
 from dotenv import load_dotenv
-import os
-from expense_tracker.models import Base
-from expense_tracker.db.config import DB_URL
-
-
-config = context.config
-config.set_main_option("sqlalchemy.url", DB_URL)
-
+from expense_tracker.models.base import Base
+from expense_tracker.models.account import Account
+from expense_tracker.models.budget import Budget
+from expense_tracker.models.category import Category
+from expense_tracker.models.transaction import Transaction
+from expense_tracker.config import Config
 
 load_dotenv()
-
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config
+
+# Set the sqlalchemy.url
+config.set_main_option("sqlalchemy.url", Config.DB_URL)
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
@@ -26,14 +26,7 @@ if config.config_file_name is not None:
 
 # add your model's MetaData object here
 # for 'autogenerate' support
-# from myapp import mymodel
-# target_metadata = mymodel.Base.metadata
 target_metadata = Base.metadata
-
-# other values from the config, defined by the needs of env.py,
-# can be acquired:
-# my_important_option = config.get_main_option("my_important_option")
-# ... etc.
 
 
 def run_migrations_offline() -> None:
@@ -49,7 +42,7 @@ def run_migrations_offline() -> None:
     script output.
     """
     context.configure(
-        url=DB_URL,
+        url=Config.DB_URL,
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
@@ -70,7 +63,7 @@ def run_migrations_online() -> None:
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
-        url=DB_URL
+        url=Config.DB_URL
     )
 
     with connectable.connect() as connection:
