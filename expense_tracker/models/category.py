@@ -12,3 +12,10 @@ class Category(Base):
 
     transactions = relationship("Transaction", back_populates="category")
     budget = relationship("Budget", back_populates="category")
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'description': self.description
+        }
