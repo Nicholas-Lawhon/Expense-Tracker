@@ -14,3 +14,13 @@ class Budget(Base):
     end_date = Column(Date, nullable=True)
 
     category = relationship("Category", back_populates="budget")
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'amount': self.amount,
+            'category_id': self.category_id,
+            'start_date': self.start_date.isoformat() if self.start_date else None,
+            'end_date': self.end_date.isoformat() if self.end_date else None
+        }

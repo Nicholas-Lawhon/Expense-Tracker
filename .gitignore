@@ -23,6 +23,7 @@ alembic/versions/*.py
 # IDE specific files
 .idea/
 .vscode/
+.vs/
 
 # OS specific files
 .DS_Store

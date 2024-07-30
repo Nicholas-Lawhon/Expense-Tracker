@@ -20,3 +20,17 @@ class Transaction(Base):
 
     account = relationship("Account", back_populates="transactions")
     category = relationship("Category", back_populates="transactions")
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'amount': self.amount,
+            'account_id': self.account_id,
+            'category_id': self.category_id,
+            'date': self.date.isoformat(),
+            'type': self.type.name,
+            'interval': self.interval.name,
+            'billing_date': self.billing_date.isoformat() if self.billing_date else None,
+            'description': self.description
+        }
